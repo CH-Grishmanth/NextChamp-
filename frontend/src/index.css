@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Focus styles for accessibility */
+.focus-visible {
+  @apply ring-2 ring-primary-500 ring-offset-2 ring-offset-slate-900 outline-none;
+}
+
+/* Custom utility classes */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.animation-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom upload button from Uiverse.io by Creatlydev */
+.button {
+  --bg: linear-gradient(180deg,
+            hsla(0, 0%, 100%, .1),
+            hsla(0, 0%, 100%, 0)),
+        #637AB9;
+  box-shadow: 0 1px 2px #25114f66, 0 0 0 1px #637AB9;
+  background-color: transparent;
+  border: none;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .25rem .5rem;
+  cursor: pointer;
+  padding-right: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bg);
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid #fff3;
+}
+
+/* View Reference Button from Uiverse.io by Creatlydev */
+.button-reference {
+  --clr: #475569;
+  line-height: 1;
+  text-decoration: none;
+  display: inline-flex;
+  border: none;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--clr);
+  color: #fff;
+  border-radius: 10rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  padding-left: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.3s;
+  font-size: 0.875rem;
+}
+
+.button-reference__icon-wrapper {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  color: var(--clr);
+  background-color: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.button-reference:hover {
+  background-color: #334155;
+}
+
+.button-reference:hover .button-reference__icon-wrapper {
+  color: #334155;
+}
+
+.button-reference__icon-svg--copy {
+  position: absolute;
+  transform: translate(-150%, 150%);
+}
+
+.button-reference:hover .button-reference__icon-svg:first-child {
+  transition: transform 0.3s ease-in-out;
+  transform: translate(150%, -150%);
+}
+
+.button-reference:hover .button-reference__icon-svg--copy {
+  transition: transform 0.3s ease-in-out 0.1s;
+  transform: translate(0);
+}
+
+/* Login with Aadhar Button - Gradient styling */
+.button-aadhar {
+  background: linear-gradient(135deg, #475569 0%, #334155 50%, #1e293b 100%);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.button-aadhar:hover {
+  background: linear-gradient(135deg, #334155 0%, #1e293b 50%, #0f172a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(0, 0, 0, 0.15), 0 3px 6px -1px rgba(0, 0, 0, 0.1);
+}
