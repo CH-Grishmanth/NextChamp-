@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bell, Upload, User, X, CreditCard } from 'lucide-react';
+import { Bell, Upload, User } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function AppHeader() {
   const location = useLocation();
-  const isAuthenticated = false; // TODO: Replace with actual auth state
-  const [isAadharModalOpen, setIsAadharModalOpen] = useState(false);
-  const [aadharNumber, setAadharNumber] = useState('');
+  const { user, isAuthenticated, loginWithGoogle, logout } = useAuth();
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -16,18 +15,6 @@ export function AppHeader() {
     { name: 'About', path: '/about' },
     { name: 'Contact', path: '/contact' }
   ];
-
-  const handleAadharSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (aadharNumber.length === 12) {
-      // Handle Aadhar authentication here
-      console.log('Aadhar Number:', aadharNumber);
-      setIsAadharModalOpen(false);
-      setAadharNumber('');
-    } else {
-      alert('Please enter a valid 12-digit Aadhar number');
-    }
-  };
 
   return (
     <header className="bg-slate-800 border-b border-slate-700">
@@ -64,7 +51,7 @@ export function AppHeader() {
 
           {/* Right side */}
           <div className="flex items-center space-x-4">
-            {isAuthenticated ? (
+            {isAuthenticated && user ? (
               <>
                 <button className="btn-primary flex items-center space-x-2">
                   <Upload className="w-4 h-4" />
@@ -73,77 +60,39 @@ export function AppHeader() {
                 <button className="p-2 text-slate-300 hover:text-white">
                   <Bell className="w-5 h-5" />
                 </button>
-                <Link to="/profile" className="p-2 text-slate-300 hover:text-white">
-                  <User className="w-5 h-5" />
+                <Link to="/profile" className="flex items-center space-x-2 p-1 px-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
+                  {user.avatar_url ? (
+                    <img 
+                      src={user.avatar_url} 
+                      alt={user.name} 
+                      className="w-8 h-8 rounded-full border border-blue-500" 
+                    />
+                  ) : (
+                    <User className="w-5 h-5 text-slate-300" />
+                  )}
+                  <span className="hidden sm:inline text-sm font-medium">{user.name}</span>
                 </Link>
+                <button 
+                  onClick={logout}
+                  className="px-3 py-1.5 border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors text-xs font-semibold"
+                >
+                  Logout
+                </button>
               </>
             ) : (
               <button 
-                onClick={() => setIsAadharModalOpen(true)}
-                className="button-aadhar flex items-center space-x-2"
+                onClick={loginWithGoogle}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-2 px-4 rounded-lg flex items-center space-x-2 transition-all duration-300 transform hover:scale-105 shadow-md shadow-blue-500/20"
               >
-                <CreditCard className="w-4 h-4" />
-                <span>Login with Aadhar</span>
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.415 0-6.19-2.77-6.19-6.19 0-3.42 2.777-6.19 6.19-6.19 1.463 0 2.8.51 3.85 1.353l3.057-3.057C18.91 2.378 15.82 1 12.24 1A10.99 10.99 0 0 0 1.25 12a10.99 10.99 0 0 0 10.99 11c6.105 0 11.1-4.426 11.1-11 0-.74-.08-1.42-.2-2.01H12.24z"/>
+                </svg>
+                <span>Login with Google</span>
               </button>
             )}
           </div>
         </div>
       </div>
-
-      {/* Aadhar Login Modal */}
-      {isAadharModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-8 max-w-md w-full mx-4 border border-slate-700">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Login with Aadhar</h2>
-              <button 
-                onClick={() => setIsAadharModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleAadharSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="aadhar" className="block text-sm font-medium text-slate-300 mb-2">
-                  Aadhar Number
-                </label>
-                <input
-                  type="text"
-                  id="aadhar"
-                  value={aadharNumber}
-                  onChange={(e) => setAadharNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                  placeholder="Enter your 12-digit Aadhar number"
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  maxLength={12}
-                  required
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  {aadharNumber.length}/12 digits
-                </p>
-              </div>
-              
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAadharModalOpen(false)}
-                  className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 button"
-                  disabled={aadharNumber.length !== 12}
-                >
-                  Login
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </header>
   );
 }

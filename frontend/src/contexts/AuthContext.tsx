@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { auth, googleProvider } from '../firebase';
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 
 interface User {
   id: string;
@@ -10,33 +12,80 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (user: User) => void;
-  logout: () => void;
+  loading: boolean;
+  loginWithGoogle: () => Promise<void>;
+  login: (userData: User) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const login = (userData: User) => {
     setUser(userData);
   };
 
-  const logout = () => {
-    setUser(null);
+  const loginWithGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = result.user;
+      if (firebaseUser) {
+        setUser({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'User',
+          email: firebaseUser.email || '',
+          avatar_url: firebaseUser.photoURL || undefined
+        });
+      }
+    } catch (error) {
+      console.error('Google Sign-in failed:', error);
+      throw error;
+    }
   };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error('Sign-out failed:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'User',
+          email: firebaseUser.email || '',
+          avatar_url: firebaseUser.photoURL || undefined
+        });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
+        loading,
+        loginWithGoogle,
         login,
         logout
       }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 }

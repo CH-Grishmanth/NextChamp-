@@ -1,5 +1,4 @@
 import React, { useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { Upload, Camera, Eye, Play } from 'lucide-react';
 
 export function Discover() {
