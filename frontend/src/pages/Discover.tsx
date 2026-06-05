@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Upload, Camera, Eye, Play } from 'lucide-react';
 
 interface Drill {
@@ -123,18 +124,29 @@ const sportsData: Record<string, SportInfo> = {
 
 export function Discover() {
   const [selectedSport, setSelectedSport] = useState<string>('football');
+  const [activeDrillName, setActiveDrillName] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log(`Uploading performance video for ${selectedSport}:`, file.name);
-      // Backend hookup logic will handle this file
+      navigate('/compete', { 
+        state: { 
+          uploadedVideoFile: file, 
+          drillName: activeDrillName || 'General Performance', 
+          sportName: currentSport.name 
+        } 
+      });
     }
   };
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
+  const handleUploadClick = (drillName: string) => {
+    setActiveDrillName(drillName);
+    // Use setTimeout to allow the activeDrillName state to set before prompting file dialog
+    setTimeout(() => {
+      fileInputRef.current?.click();
+    }, 50);
   };
 
   const currentSport = sportsData[selectedSport] || sportsData.football;
@@ -190,7 +202,7 @@ export function Discover() {
                         </div>
                       </button>
                       <button 
-                        onClick={handleUploadClick}
+                        onClick={() => handleUploadClick(category.name)}
                         className="button flex items-center justify-center space-x-2"
                       >
                         <Upload className="w-4 h-4" />
@@ -223,7 +235,7 @@ export function Discover() {
               <h3 className="text-lg font-semibold text-white mb-4">Upload Your Performance</h3>
               <div 
                 className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center mb-4 cursor-pointer hover:border-slate-500 transition-colors"
-                onClick={handleUploadClick}
+                onClick={() => handleUploadClick(currentSport.drills[0]?.name || 'Performance')}
               >
                 <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                 <p className="text-sm text-slate-300 mb-2">Drop your video here or click to browse</p>
