@@ -2,15 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Play, 
   Share2, 
-  Save, 
   Star, 
   Trophy, 
-  Target, 
   Zap, 
   Award, 
-  TrendingUp, 
-  Users, 
-  Medal, 
   Upload, 
   Loader2,
   Sparkles
@@ -699,10 +694,11 @@ export function Compete() {
     }
 
     try {
+      const localVideoUrl = URL.createObjectURL(file);
       if (isAuthenticated && user) {
         const sessionData = {
           userId: user.id,
-          videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          videoUrl: localVideoUrl,
           videoName: file.name,
           drillCategory: drill,
           score: mockScore,
@@ -736,7 +732,7 @@ export function Compete() {
         id: Date.now(),
         title: drill + ' Analysis',
         videoThumbnail: defaultAnalysis.videoThumbnail,
-        videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        videoUrl: localVideoUrl,
         score: mockScore,
         metrics: simulatedMetrics,
         feedback: {
@@ -1047,84 +1043,6 @@ export function Compete() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Leaderboard Section */}
-        <div className="mt-12">
-          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center">
-                <Trophy className="w-6 h-6 mr-2 text-yellow-400" />
-                Global Leaderboard - {defaultAnalysis.title.replace(' Analysis', '')}
-              </h2>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-750 text-slate-400 text-xs uppercase tracking-wider">
-                    <th className="text-left pb-3 font-semibold">Rank</th>
-                    <th className="text-left pb-3 font-semibold">Athlete</th>
-                    <th className="text-left pb-3 font-semibold">Overall Score</th>
-                    <th className="text-left pb-3 font-semibold">Badge</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-750">
-                  {leaderboard.map((player, index) => (
-                    <tr key={index} className="hover:bg-slate-750/30 transition-colors">
-                      <td className="py-4">
-                        <div className="flex items-center">
-                          {player.rank <= 3 ? (
-                            <Medal className={`w-5 h-5 mr-2 ${
-                              player.rank === 1 ? 'text-yellow-400' : 
-                              player.rank === 2 ? 'text-gray-300' : 
-                              'text-amber-600'
-                            }`} />
-                          ) : null}
-                          <span className="text-white font-bold">#{player.rank}</span>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <span className="text-white font-medium">{player.name}</span>
-                      </td>
-                      <td className="py-4">
-                        <span className="text-blue-400 font-extrabold">{player.score}</span>
-                      </td>
-                      <td className="py-4">
-                        <span className="bg-slate-700/60 text-slate-300 px-2.5 py-1 rounded-full text-xs border border-slate-650">
-                          {player.badge}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 text-center shadow-lg">
-            <Target className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white mb-1">15</div>
-            <div className="text-slate-400 text-xs font-semibold">Analyses Completed</div>
-          </div>
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 text-center shadow-lg">
-            <Trophy className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white mb-1">8</div>
-            <div className="text-slate-400 text-xs font-semibold">Badges Earned</div>
-          </div>
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 text-center shadow-lg">
-            <TrendingUp className="w-8 h-8 text-green-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white mb-1">+12%</div>
-            <div className="text-slate-400 text-xs font-semibold">Improvement Rate</div>
-          </div>
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 text-center shadow-lg">
-            <Users className="w-8 h-8 text-purple-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white mb-1">#247</div>
-            <div className="text-slate-400 text-xs font-semibold">Global Rank</div>
           </div>
         </div>
       </div>
