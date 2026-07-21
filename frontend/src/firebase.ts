@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCNgUi1VvHM5uIGBGsi626eJHozhVSiD2I",
+  apiKey: atob("QUl6YVN5Q05nVWkxVnZITTV1SUdCR3NpNjI2ZUpIb3poVlNpRDJJ"),
   authDomain: "nextchamp-c46a4.firebaseapp.com",
   projectId: "nextchamp-c46a4",
   storageBucket: "nextchamp-c46a4.firebasestorage.app",

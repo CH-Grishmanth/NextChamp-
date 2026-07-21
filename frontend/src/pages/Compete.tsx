@@ -431,7 +431,7 @@ const sportMockData: Record<string, Array<{
   ]
 };
 
-const getSmartMockReply = (message: string, drill: string, score: number, suggestions: string[]): string => {
+const getSmartMockReply = (message: string, drill: string, score: number, suggestions: string[], mistakes: string[]): string => {
   const msg = message.toLowerCase();
   const drillName = drill.toLowerCase();
 
@@ -445,11 +445,13 @@ const getSmartMockReply = (message: string, drill: string, score: number, sugges
     return `Your score of ${score}% is a solid foundation! To push it past 85%, focus on correcting your balance and performing slow shadow drill reps.`;
   }
   if (msg.includes('mistake') || msg.includes('flaw') || msg.includes('wrong') || msg.includes('error')) {
-    return `The analysis suggests focusing on locking your joints during key contact frames to eliminate minor balance errors.`;
+    if (mistakes && mistakes.length > 0) {
+      return `The main posture warning flagged is: "${mistakes[0]}". Concentrate on correcting this alignment to improve your scores.`;
+    }
+    return `No major posture warnings were flagged! Focus on consistency and balance.`;
   }
   if (msg.includes('tip') || msg.includes('suggest') || msg.includes('help') || msg.includes('improve') || msg.includes('drill')) {
     if (suggestions && suggestions.length > 0) {
-      // clean suggestion
       const cleanTip = suggestions[0].split(':')[0];
       return `I highly recommend starting with this key adjustment: "${cleanTip}". Practice 20 shadow reps daily to build muscle memory.`;
     }
@@ -764,6 +766,7 @@ export function Compete() {
           suggestion: result.geminiSuggestion || 'Analysis completed successfully.'
         },
         suggestions: result.suggestions || [],
+        mistakes: result.mistakes || [],
         badge: dbBadge
       };
 
@@ -890,6 +893,7 @@ export function Compete() {
           suggestion: mockSuggestions[0]
         },
         suggestions: mockSuggestions,
+        mistakes: mockMistakes,
         badge: simulatedBadge
       };
 
@@ -954,8 +958,8 @@ export function Compete() {
       const response = await axios.post('http://localhost:8000/chat-coaching', {
         drillCategory: defaultAnalysis.title.replace(' Analysis', ''),
         score: currentAnalysis.score || 75,
-        mistakes: currentAnalysis.feedback.suggestion.split(' | '),
-        suggestions: [currentAnalysis.feedback.highlight],
+        mistakes: currentAnalysis.mistakes || [],
+        suggestions: currentAnalysis.suggestions || [],
         message: userText,
         history: updatedMessages.map(m => ({ sender: m.sender, message: m.message }))
       });
@@ -976,7 +980,8 @@ export function Compete() {
         userText,
         defaultAnalysis.title.replace(' Analysis', ''),
         currentAnalysis.score || 75,
-        currentAnalysis.suggestions || []
+        currentAnalysis.suggestions || [],
+        currentAnalysis.mistakes || []
       );
       const coachMsg = { sender: 'gemini' as const, message: mockReply, timestamp: new Date() };
       setMessages(prev => [...prev, coachMsg]);
