@@ -1,15 +1,16 @@
 import { db } from '../firebase';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy 
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  deleteDoc
 } from 'firebase/firestore';
 
 export interface UserProfile {
@@ -88,13 +89,20 @@ export async function saveAnalysisSession(sessionData: Omit<AnalysisSession, 'id
  */
 export async function getUserAnalysisHistory(userId: string): Promise<AnalysisSession[]> {
   const colRef = collection(db, 'analysis_sessions');
-  const q = query(colRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  // Query without orderBy to avoid needing a Firestore composite index
+  const q = query(colRef, where('userId', '==', userId));
   const querySnapshot = await getDocs(q);
   const sessions: AnalysisSession[] = [];
   querySnapshot.forEach((docSnap) => {
     sessions.push({ id: docSnap.id, ...docSnap.data() } as AnalysisSession);
   });
-  return sessions;
+  
+  // Sort in-memory by createdAt descending
+  return sessions.sort((a, b) => {
+    const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+    const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
+    return timeB - timeA;
+  });
 }
 
 /**
@@ -115,4 +123,12 @@ export async function addChatMessage(sessionId: string, sender: 'user' | 'gemini
       messages: [...currentMessages, newMessage]
     });
   }
+}
+
+/**
+ * Delete a video analysis session from Firestore.
+ */
+export async function deleteAnalysisSession(sessionId: string): Promise<void> {
+  const docRef = doc(db, 'analysis_sessions', sessionId);
+  await deleteDoc(docRef);
 }

@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Play, 
-  Share2, 
-  Star, 
-  Trophy, 
-  Zap, 
-  Award, 
-  Upload, 
+import {
+  Play,
+  Share2,
+  Star,
+  Trophy,
+  Zap,
+  Award,
+  Upload,
   Loader2,
-  Sparkles
+  Sparkles,
+  History,
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { saveAnalysisSession, addChatMessage } from '../services/dbService';
+import { saveAnalysisSession, addChatMessage, getUserAnalysisHistory, deleteAnalysisSession } from '../services/dbService';
 import axios from 'axios';
 
 const sportMockData: Record<string, Array<{
@@ -428,6 +431,45 @@ const sportMockData: Record<string, Array<{
   ]
 };
 
+const getSmartMockReply = (message: string, drill: string, score: number, suggestions: string[]): string => {
+  const msg = message.toLowerCase();
+  const drillName = drill.toLowerCase();
+
+  if (msg.includes('posture') || msg.includes('form') || msg.includes('body') || msg.includes('angle') || msg.includes('joint')) {
+    return `For your ${drillName} drill, focus on body lean and keeping your joints aligned. Try working on a more stable stance throughout your movement.`;
+  }
+  if (msg.includes('speed') || msg.includes('power') || msg.includes('fast') || msg.includes('slow')) {
+    return `To build better speed and power in ${drillName}, focus on explosive hip rotation and a quick snap of the knee. Keep your muscles relaxed before launching the strike.`;
+  }
+  if (msg.includes('score') || msg.includes('percent') || msg.includes('points') || msg.includes('mark')) {
+    return `Your score of ${score}% is a solid foundation! To push it past 85%, focus on correcting your balance and performing slow shadow drill reps.`;
+  }
+  if (msg.includes('mistake') || msg.includes('flaw') || msg.includes('wrong') || msg.includes('error')) {
+    return `The analysis suggests focusing on locking your joints during key contact frames to eliminate minor balance errors.`;
+  }
+  if (msg.includes('tip') || msg.includes('suggest') || msg.includes('help') || msg.includes('improve') || msg.includes('drill')) {
+    if (suggestions && suggestions.length > 0) {
+      // clean suggestion
+      const cleanTip = suggestions[0].split(':')[0];
+      return `I highly recommend starting with this key adjustment: "${cleanTip}". Practice 20 shadow reps daily to build muscle memory.`;
+    }
+    return `Try performing slow-motion shadow practice of ${drillName} 3 times a week, focusing entirely on your balance and extension.`;
+  }
+  if (msg.includes('hello') || msg.includes('hi ') || msg.includes('hey')) {
+    return `Hello! I am your AI Coaching assistant. I have reviewed your ${drillName} performance. What specific technical aspect would you like to improve?`;
+  }
+
+  // Default varied responses
+  const fallbacks = [
+    `To improve your ${drillName} score of ${score}%, try focusing on smooth body rotation and balance drills. Keep practicing!`,
+    `Great attempt at the ${drillName}! Make sure to keep your chest over the ball at contact to keep it stable.`,
+    `Analyzing your timing shows good progress. Focus on maintaining standard joint angles for better consistency.`,
+    `Repetition is key! Try recording yourself from a side angle next time to check your alignment.`
+  ];
+  const hash = message.length % fallbacks.length;
+  return fallbacks[hash];
+};
+
 export function Compete() {
   const { user, isAuthenticated } = useAuth();
   const location = useLocation();
@@ -451,14 +493,122 @@ export function Compete() {
   const [analysisProgress, setAnalysisProgress] = useState('');
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
   const [shared, setShared] = useState(false);
-  
+
   // Chat Coach States
-  const [messages, setMessages] = useState<Array<{sender: 'user' | 'gemini', message: string, timestamp: Date}>>([
+  const [messages, setMessages] = useState<Array<{ sender: 'user' | 'gemini', message: string, timestamp: Date }>>([
     { sender: 'gemini', message: 'Hello! I am your Gemini AI Coach. Upload your drill video above, and we can discuss your posture and performance, and plan corrections.', timestamp: new Date() }
   ]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [userMessageInput, setUserMessageInput] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+
+  // History Modal States
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historySessions, setHistorySessions] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+
+  const handleDeleteHistorySession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this analysis session?")) return;
+    try {
+      await deleteAnalysisSession(sessionId);
+      setHistorySessions(prev => prev.filter(s => s.id !== sessionId));
+      if (activeSessionId === sessionId) {
+        setCustomAnalysis(null);
+        setActiveSessionId(null);
+      }
+      alert("Session deleted successfully.");
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+      alert("Failed to delete session.");
+    } finally {
+      setActiveActionMenuId(null);
+    }
+  };
+
+  const handleShareHistorySession = (e: React.MouseEvent, session: any) => {
+    e.stopPropagation();
+    const athleteName = user ? user.name : 'You';
+    const newEntry = {
+      rank: 1,
+      name: athleteName,
+      score: (session.score || 75) * 10,
+      badge: session.badge?.title || 'Form Master'
+    };
+
+    const updatedLeaderboard = [...leaderboard, newEntry]
+      .sort((a, b) => b.score - a.score)
+      .map((player, idx) => ({
+        ...player,
+        rank: idx + 1
+      }));
+
+    setLeaderboard(updatedLeaderboard.slice(0, 6));
+    alert('This session score has been shared to the global leaderboard!');
+    setActiveActionMenuId(null);
+  };
+
+  const handleOpenHistory = async () => {
+    if (!isAuthenticated || !user) {
+      alert("Please sign in to view your analysis history!");
+      return;
+    }
+    setShowHistoryModal(true);
+    setIsLoadingHistory(true);
+    try {
+      const history = await getUserAnalysisHistory(user.id);
+      setHistorySessions(history);
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      alert("Failed to load history from database.");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleSelectHistorySession = (session: any) => {
+    let matchedSport = 'Football';
+    const drillCategory = session.drillCategory || 'General Performance';
+    const drillLower = drillCategory.toLowerCase();
+    
+    for (const [sportKey, drills] of Object.entries(sportMockData)) {
+      if (drills.some(d => d.title.toLowerCase().startsWith(drillLower))) {
+        matchedSport = sportKey;
+        break;
+      }
+    }
+    setActiveSport(matchedSport);
+
+    const mockList = sportMockData[matchedSport] || sportMockData.Football;
+    const tabIndex = mockList.findIndex(d => d.title.toLowerCase().startsWith(drillLower));
+    if (tabIndex !== -1) {
+      setSelectedDrillIndex(tabIndex);
+    }
+
+    setCustomAnalysis({
+      id: session.id,
+      title: drillCategory + ' Analysis',
+      videoThumbnail: mockList[tabIndex !== -1 ? tabIndex : 0]?.videoThumbnail || '',
+      videoUrl: session.videoUrl,
+      originalVideoUrl: session.originalVideoUrl || session.videoUrl,
+      score: session.score,
+      metrics: session.metrics || [],
+      feedback: {
+        highlight: 'Loaded from History',
+        suggestion: session.geminiSuggestion || 'Analysis completed successfully.'
+      },
+      suggestions: session.suggestions || [],
+      badge: session.badge || { title: 'Form Master', description: 'Loaded from history.', icon: 'star' }
+    });
+
+    setMessages(session.messages || [
+      { sender: 'gemini', message: session.geminiSuggestion || 'Analysis loaded.', timestamp: new Date() }
+    ]);
+    setActiveSessionId(session.id);
+    setShared(true);
+    setShowHistoryModal(false);
+  };
 
   const currentSportMockData = sportMockData[activeSport] || sportMockData.Football;
   const defaultAnalysis = currentSportMockData[selectedDrillIndex] || currentSportMockData[0];
@@ -635,7 +785,7 @@ export function Compete() {
 
   const runSimulatedAnalysis = async (file: File, drill: string, sport: string) => {
     setAnalysisProgress('Simulating joint estimation using MediaPipe...');
-    
+
     // Simulate some latency for the AI loading sequence
     await new Promise(resolve => setTimeout(resolve, 1500));
 
@@ -654,7 +804,7 @@ export function Compete() {
     let simulatedMetrics = [];
     let simulatedBadge = { title: 'Skill Master', description: 'Outstanding technical form.', icon: 'trophy' };
     const sportLower = sport.toLowerCase();
-    
+
     if (sportLower.includes('cricket')) {
       simulatedMetrics = [
         { label: 'Footwork', score: Math.round(mockScore / 10), maxScore: 10 },
@@ -749,15 +899,15 @@ export function Compete() {
       } else {
         alert('AI Server Simulation Successful! Note: Sign in to save this analysis to your Profile.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to simulate analysis storage.');
+      alert('Failed to simulate analysis storage: ' + (err?.message || err));
     }
   };
 
   const shareToLeaderboard = () => {
     if (shared) return;
-    
+
     const athleteName = user ? user.name : 'You';
     const newEntry = {
       rank: 1, // Will compute index below
@@ -822,7 +972,12 @@ export function Compete() {
       console.warn('Chat coach API offline. Simulating response...');
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const mockReply = `To optimize your ${defaultAnalysis.title.replace(' Analysis', '').toLowerCase()} score of ${currentAnalysis.score || 75}%, try focusing on smooth body rotation and balance drills. Keep practicing!`;
+      const mockReply = getSmartMockReply(
+        userText,
+        defaultAnalysis.title.replace(' Analysis', ''),
+        currentAnalysis.score || 75,
+        currentAnalysis.suggestions || []
+      );
       const coachMsg = { sender: 'gemini' as const, message: mockReply, timestamp: new Date() };
       setMessages(prev => [...prev, coachMsg]);
 
@@ -847,205 +1002,416 @@ export function Compete() {
     <div className="min-h-screen bg-slate-900 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="relative mb-8 text-center">
           <h1 className="text-4xl font-bold text-white mb-4">Compete & Analyze</h1>
           <p className="text-xl text-slate-300 max-w-3xl mx-auto">
             Review your AI-powered performance analysis and compete with athletes worldwide
           </p>
+          <div className="md:absolute md:top-4 md:right-0 mt-4 md:mt-0 flex justify-center">
+            <button 
+              onClick={handleOpenHistory}
+              className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 px-4 rounded-lg border border-slate-700 shadow-md transition-all active:scale-95 text-sm"
+            >
+              <History className="w-4 h-4 text-blue-450" />
+              <span>History</span>
+            </button>
+          </div>
         </div>
 
+        {/* 1. TOP SECTION: HUGE 16:9 VIDEO PLAYER */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 relative overflow-hidden shadow-xl mb-6">
+          {/* Processing Overlay */}
+          {isAnalyzing && (
+            <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+              <h3 className="text-xl font-bold text-white mb-1">Processing Performance Video</h3>
+              <p className="text-slate-400 text-sm max-w-xs">{analysisProgress}</p>
+            </div>
+          )}
 
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Analysis Display */}
-          <div className="lg:col-span-2">
-            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 relative overflow-hidden shadow-xl">
-              
-              {/* Processing Overlay */}
-              {isAnalyzing && (
-                <div className="absolute inset-0 bg-slate-900/90 z-20 flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
-                  <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-1">Processing Performance Video</h3>
-                  <p className="text-slate-400 text-sm max-w-xs">{analysisProgress}</p>
-                </div>
-              )}
-
-              {/* Video Section */}
-              <div className="relative mb-6">
-                {currentAnalysis.videoUrl ? (
-                  <video 
-                    src={currentAnalysis.videoUrl} 
-                    controls 
-                    className="w-full h-80 object-cover rounded-lg bg-black border border-slate-700"
-                  />
-                ) : (
-                  <>
-                    <img
-                      src={currentAnalysis.videoThumbnail}
-                      alt="Analysis Video"
-                      className="w-full h-80 object-cover rounded-lg opacity-85"
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center rounded-lg">
-                      <button 
-                        onClick={() => alert('Please upload your video to start joint tracking and AI playback.')}
-                        className="bg-white bg-opacity-20 p-6 rounded-full backdrop-blur-sm hover:bg-opacity-30 transition-all active:scale-95"
-                      >
-                        <Play className="w-12 h-12 text-white" fill="white" />
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Action Buttons & Upload */}
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full">
-                  <input 
-                    type="file" 
-                    accept="video/*" 
-                    onChange={handleVideoUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                  />
-                  <button className="button w-full justify-center bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-4 rounded-lg flex items-center space-x-2.5 transition-colors">
-                    <Upload className="w-4.5 h-4.5" />
-                    <span>Upload Drill Video</span>
+          <div className="relative w-full aspect-video max-h-[600px] mx-auto bg-black rounded-lg overflow-hidden border border-slate-700">
+            {currentAnalysis.videoUrl ? (
+              <video
+                src={currentAnalysis.videoUrl}
+                controls
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <>
+                <img
+                  src={currentAnalysis.videoThumbnail}
+                  alt="Analysis Video"
+                  className="w-full h-full object-cover opacity-85"
+                />
+                <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                  <button
+                    onClick={() => alert('Please upload your video to start joint tracking and AI playback.')}
+                    className="bg-white bg-opacity-20 p-6 rounded-full backdrop-blur-sm hover:bg-opacity-30 transition-all active:scale-95"
+                  >
+                    <Play className="w-12 h-12 text-white" fill="white" />
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+        </div>
 
-                <button 
-                  onClick={shareToLeaderboard}
-                  disabled={shared}
-                  className={`px-6 py-3.5 rounded-lg transition-all flex items-center justify-center space-x-2.5 font-bold w-full sm:w-auto ${
-                    shared 
-                      ? 'bg-slate-700 text-slate-400 border border-slate-600 cursor-not-allowed'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                  }`}
+        {/* 2. MIDDLE SECTION: 3 COLUMNS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+
+          {/* Column 1: AI Score */}
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl flex flex-col justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2 border-b border-slate-700 pb-2">
+                <Award className="w-5 h-5 text-blue-450" />
+                <span>AI Score & Metrics</span>
+              </h3>
+
+              {customAnalysis ? (
+                <div className="space-y-4 mb-6">
+                  {Array.isArray(currentAnalysis.metrics) ? (
+                    currentAnalysis.metrics.map((metric: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span className="text-slate-300 text-sm">{metric.label}</span>
+                        <span className="text-2xl font-bold text-blue-400">
+                          {metric.score}
+                          <span className="text-xs text-slate-500 ml-0.5">
+                            {metric.maxScore ? `/${metric.maxScore}` : ''}
+                            {metric.label === 'Accuracy' && !metric.maxScore ? '%' : ''}
+                          </span>
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    Object.entries(currentAnalysis.metrics).map(([key, metric]: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span className="text-slate-305 text-sm">{metric.label}</span>
+                        <span className="text-2xl font-bold text-blue-400">
+                          {metric.score}
+                          <span className="text-xs text-slate-500 ml-0.5">
+                            {metric.maxScore ? `/${metric.maxScore}` : ''}
+                            {metric.label === 'Accuracy' && !metric.maxScore ? '%' : ''}
+                          </span>
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="text-slate-500 text-sm italic text-center py-8">
+                  Upload a drill video to see your AI score and posture metrics.
+                </div>
+              )}
+            </div>
+
+            {/* Badge Info */}
+            {customAnalysis && (
+              <div className="bg-blue-600 bg-opacity-20 rounded-lg p-3.5 border border-blue-500 border-opacity-30 mt-auto">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-500 bg-opacity-30 p-2 rounded-lg">
+                    {getBadgeIcon(currentAnalysis.badge.icon)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-blue-400 font-bold mb-0.5 uppercase tracking-wider">Badge Earned</div>
+                    <h4 className="text-sm font-bold text-white truncate">{currentAnalysis.badge.title}</h4>
+                    <p className="text-slate-300 text-[11px] leading-snug line-clamp-2 mt-0.5">{currentAnalysis.badge.description}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Column 2: Coaching Tips */}
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2 border-b border-slate-700 pb-2">
+              <Sparkles className="w-5 h-5 text-emerald-400" />
+              <span>Coaching Tips</span>
+            </h3>
+
+            {customAnalysis && currentAnalysis.suggestions && currentAnalysis.suggestions.length > 0 ? (
+              <ul className="space-y-3">
+                {currentAnalysis.suggestions.map((tip: string, idx: number) => (
+                  <li key={idx} className="text-slate-300 text-sm leading-relaxed flex items-start space-x-2">
+                    <span className="text-emerald-400 font-bold mt-0.5">•</span>
+                    <span>{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-slate-500 text-sm italic text-center py-8">
+                Upload a drill video to receive AI coaching tips.
+              </div>
+            )}
+          </div>
+
+          {/* Column 3: Upload Actions */}
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl flex flex-col justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2 border-b border-slate-700 pb-2">
+                <Upload className="w-5 h-5 text-purple-400" />
+                <span>Upload & Actions</span>
+              </h3>
+              <p className="text-slate-400 text-xs leading-relaxed mb-4">
+                Select your sport and drill type below, then upload your performance video for AI analysis.
+              </p>
+
+              {/* Sport Selector */}
+              <div className="mb-4">
+                <label className="block text-slate-400 text-[10px] font-bold mb-1.5 uppercase tracking-wider">Select Sport</label>
+                <select
+                  value={activeSport}
+                  onChange={(e) => {
+                    setActiveSport(e.target.value);
+                    setSelectedDrillIndex(0); // reset drill index
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                 >
-                  <Share2 className="w-4.5 h-4.5" />
-                  <span>{shared ? 'Shared to Rankings' : 'Share to Leaderboard'}</span>
-                </button>
+                  <option value="Football">Football ⚽</option>
+                  <option value="Cricket">Cricket 🏏</option>
+                  <option value="Basketball">Basketball 🏀</option>
+                  <option value="Volleyball">Volleyball 🏐</option>
+                  <option value="Hockey">Hockey 🏑</option>
+                </select>
+              </div>
+
+              {/* Drill Selector */}
+              <div className="mb-6">
+                <label className="block text-slate-400 text-[10px] font-bold mb-1.5 uppercase tracking-wider">Select Drill</label>
+                <select
+                  value={selectedDrillIndex}
+                  onChange={(e) => {
+                    setSelectedDrillIndex(Number(e.target.value));
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                >
+                  {currentSportMockData.map((drill, idx) => (
+                    <option key={idx} value={idx}>
+                      {drill.title.replace(' Analysis', '')}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Suggestions List */}
-            {currentAnalysis.suggestions && currentAnalysis.suggestions.length > 0 && (
-              <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl mt-6">
-                <h3 className="text-sm font-bold text-emerald-450 uppercase tracking-wider mb-4 flex items-center space-x-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
-                  <span>Coaching Tips to Improve</span>
-                </h3>
-                <ul className="space-y-2.5">
-                  {currentAnalysis.suggestions.map((tip: string, idx: number) => (
-                    <li key={idx} className="text-slate-200 text-sm leading-relaxed flex items-start space-x-2">
-                      <span className="text-emerald-400 font-bold mt-0.5">•</span>
-                      <span>{tip}</span>
-                    </li>
-                  ))}
-                </ul>
+            <div className="space-y-3">
+              {/* Upload Button */}
+              <div className="relative w-full">
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleVideoUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <button className="button w-full justify-center bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-4 rounded-lg flex items-center space-x-2 transition-colors">
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Drill Video</span>
+                </button>
+              </div>
+
+              {/* Share Button (Only shown after video is uploaded/analyzed) */}
+              {customAnalysis && (
+                <button
+                  onClick={shareToLeaderboard}
+                  disabled={shared}
+                  className={`w-full py-3 px-4 rounded-lg transition-all flex items-center justify-center space-x-2 font-bold ${shared
+                      ? 'bg-slate-700 text-slate-400 border border-slate-600 cursor-not-allowed'
+                      : 'bg-emerald-650 hover:bg-emerald-600 text-white shadow-lg'
+                    }`}
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>{shared ? 'Shared to Rankings' : 'Share to Leaderboard'}</span>
+                </button>
+              )}
+
+              {/* Analyze Again / Reset Button */}
+              {customAnalysis && (
+                <button
+                  onClick={() => {
+                    setCustomAnalysis(null);
+                    setShared(false);
+                  }}
+                  className="w-full py-3 px-4 rounded-lg border border-slate-600 hover:border-slate-500 text-slate-300 hover:text-white font-semibold transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>Analyze Another Video</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. BOTTOM SECTION: AI COACH CHAT */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2 border-b border-slate-700 pb-2">
+            <Sparkles className="w-5 h-5 text-blue-400" />
+            <span>AI Coach Chat</span>
+          </h3>
+
+          {/* Message display area (taller for full-width layout) */}
+          <div className="space-y-3 max-h-80 overflow-y-auto mb-4 bg-slate-900/60 p-4 rounded-xl border border-slate-700 flex flex-col relative">
+            {!customAnalysis && (
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center rounded-xl z-10">
+                <div className="bg-slate-800 border border-slate-700 px-6 py-4 rounded-lg text-center max-w-sm shadow-xl m-4">
+                  <Sparkles className="w-6 h-6 text-blue-450 mx-auto mb-2 animate-pulse" />
+                  <p className="text-white text-sm font-bold">Chat is Locked</p>
+                  <p className="text-slate-400 text-xs mt-1">Please upload and analyze a drill video first to start chatting with your AI coach!</p>
+                </div>
               </div>
             )}
 
-            {/* AI Coach Chat Box */}
-            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl mt-6">
-              <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-                <Sparkles className="w-5 h-5 text-blue-400" />
-                <span>AI Coach Chat</span>
-              </h3>
-              
-              {/* Message display area */}
-              <div className="space-y-3 max-h-60 overflow-y-auto mb-4 bg-slate-900/60 p-4 rounded-xl border border-slate-750 flex flex-col">
-                {messages.map((msg, index) => (
-                  <div 
-                    key={index}
-                    className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                      msg.sender === 'user'
-                        ? 'bg-blue-600 text-white self-end rounded-tr-none'
-                        : 'bg-slate-800 text-slate-200 self-start rounded-tl-none border border-slate-700'
-                    }`}
-                  >
-                    {msg.message}
-                  </div>
-                ))}
-                {isSendingMessage && (
-                  <div className="bg-slate-800 text-slate-400 self-start rounded-2xl rounded-tl-none px-3.5 py-2 text-xs border border-slate-700 animate-pulse">
-                    Coach is thinking...
-                  </div>
-                )}
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.sender === 'user'
+                    ? 'bg-blue-600 text-white self-end rounded-tr-none'
+                    : 'bg-slate-800 text-slate-200 self-start rounded-tl-none border border-slate-700'
+                  }`}
+              >
+                {msg.message}
               </div>
-
-              {/* Input form */}
-              <form onSubmit={handleSendMessage} className="flex gap-2">
-                <input
-                  type="text"
-                  value={userMessageInput}
-                  onChange={(e) => setUserMessageInput(e.target.value)}
-                  placeholder="Ask the coach a question..."
-                  className="input flex-1 bg-slate-900 border-slate-700 focus:border-blue-500 text-white rounded-lg py-2 px-3 text-sm"
-                />
-                <button 
-                  type="submit"
-                  disabled={isSendingMessage || !userMessageInput.trim()}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors disabled:bg-slate-700 disabled:text-slate-450"
-                >
-                  Send
-                </button>
-              </form>
-            </div>
+            ))}
+            {isSendingMessage && (
+              <div className="bg-slate-800 text-slate-400 self-start rounded-2xl rounded-tl-none px-4 py-2.5 text-xs border border-slate-700 animate-pulse">
+                Coach is thinking...
+              </div>
+            )}
           </div>
 
-          {/* AI Analysis Panel */}
-          <div className="lg:col-span-1">
-            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 shadow-xl">
-              <h2 className="text-2xl font-bold text-white mb-6">AI Analysis</h2>
-
-              {/* Metrics */}
-              <div className="space-y-6 mb-6">
-                {Array.isArray(currentAnalysis.metrics) ? (
-                  currentAnalysis.metrics.map((metric: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center">
-                      <span className="text-slate-300">{metric.label}</span>
-                      <span className="text-3xl font-bold text-blue-400">
-                        {metric.score}
-                        <span className="text-lg text-slate-450">
-                          {metric.maxScore ? `/${metric.maxScore}` : ''}
-                          {metric.label === 'Accuracy' && !metric.maxScore ? '%' : ''}
-                        </span>
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  Object.entries(currentAnalysis.metrics).map(([key, metric]: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center">
-                      <span className="text-slate-300">{metric.label}</span>
-                      <span className="text-3xl font-bold text-blue-400">
-                        {metric.score}
-                        <span className="text-lg text-slate-450">
-                          {metric.maxScore ? `/${metric.maxScore}` : ''}
-                          {metric.label === 'Accuracy' && !metric.maxScore ? '%' : ''}
-                        </span>
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Badge */}
-              <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4 border border-blue-500 border-opacity-30">
-                <div className="flex items-start space-x-3">
-                  <div className="bg-blue-500 bg-opacity-30 p-2.5 rounded-lg">
-                    {getBadgeIcon(currentAnalysis.badge.icon)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xs text-blue-400 font-medium mb-1">BADGE EARNED</div>
-                    <h4 className="text-lg font-bold text-white mb-1">{currentAnalysis.badge.title}</h4>
-                    <p className="text-slate-300 text-xs leading-relaxed">{currentAnalysis.badge.description}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Input form */}
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <input
+              type="text"
+              disabled={!customAnalysis}
+              value={userMessageInput}
+              onChange={(e) => setUserMessageInput(e.target.value)}
+              placeholder={customAnalysis ? "Ask the coach a question about your pose, speed, or footwork..." : "Please upload a video to unlock the AI coach chat."}
+              className="input flex-1 bg-slate-900 border-slate-700 focus:border-blue-500 text-white rounded-lg py-2.5 px-4 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <button
+              type="submit"
+              disabled={!customAnalysis || isSendingMessage || !userMessageInput.trim()}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </form>
         </div>
+
+        {/* History Modal */}
+        {showHistoryModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+              <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                <div className="flex items-center space-x-2">
+                  <History className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-lg font-bold text-white">Analysis History</h3>
+                </div>
+                <button 
+                  onClick={() => setShowHistoryModal(false)}
+                  className="text-slate-400 hover:text-white transition-colors text-sm font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-slate-900/40">
+                {isLoadingHistory ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-3" />
+                    <p className="text-slate-400 text-sm">Loading your upload history...</p>
+                  </div>
+                ) : historySessions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-white font-medium">No past analysis found</p>
+                    <p className="text-slate-400 text-xs mt-1">Upload a video to start saving your history!</p>
+                  </div>
+                ) : (
+                  historySessions.map((session) => {
+                    // Match sport icon
+                    let icon = '⚽';
+                    const cat = (session.drillCategory || '').toLowerCase();
+                    if (cat.includes('bat') || cat.includes('bowl') || cat.includes('field') || cat.includes('cricket')) icon = '🏏';
+                    else if (cat.includes('basket') || cat.includes('shoot') || cat.includes('dribble') && !cat.includes('foot')) icon = '🏀';
+                    else if (cat.includes('serve') || cat.includes('spike') || cat.includes('volleyball')) icon = '🏐';
+                    else if (cat.includes('stick') || cat.includes('hockey')) icon = '🏑';
+
+                    const dateStr = session.createdAt?.toDate 
+                      ? session.createdAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : new Date(session.createdAt).toLocaleDateString();
+
+                    return (
+                      <div 
+                        key={session.id}
+                        onClick={() => handleSelectHistorySession(session)}
+                        className={`bg-slate-800 border border-slate-700 hover:border-blue-500 rounded-xl p-4 cursor-pointer transition-all flex items-center justify-between group active:scale-98 shadow-md relative ${
+                          activeActionMenuId === session.id ? 'z-30' : 'z-10'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl bg-slate-900 p-2.5 rounded-lg border border-slate-700/60 group-hover:bg-slate-900/40">
+                            {icon}
+                          </div>
+                          <div>
+                            <p className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors">
+                              {session.drillCategory}
+                            </p>
+                            <p className="text-slate-400 text-xxs mt-0.5">
+                              {dateStr}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right">
+                            <span className="text-lg font-extrabold text-blue-400">
+                              {session.score}%
+                            </span>
+                            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+                              AI Score
+                            </p>
+                          </div>
+
+                          {/* 3-dots Action Menu */}
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === session.id ? null : session.id);
+                              }}
+                              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {activeActionMenuId === session.id && (
+                              <div className="absolute right-0 mt-2 w-32 bg-slate-900 border border-slate-700 rounded-lg shadow-xl py-1 z-35 animate-in fade-in slide-in-from-top-2 duration-150">
+                                <button
+                                  onClick={(e) => handleShareHistorySession(e, session)}
+                                  className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center space-x-2 transition-colors font-semibold"
+                                >
+                                  <Share2 className="w-3.5 h-3.5 text-emerald-450" />
+                                  <span>Share</span>
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteHistorySession(e, session.id)}
+                                  className="w-full text-left px-4 py-2 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 flex items-center space-x-2 transition-colors font-semibold border-t border-slate-800"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
-}
+}
